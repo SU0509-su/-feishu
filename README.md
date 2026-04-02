@@ -17,6 +17,18 @@
 
 推送前请确认：仓库根目录存在 `config.example.json` 与 `news_bot.py`、`requirements.txt`、`.github/workflows/feishu-daily-news.yml`。
 
+### 本机已 `git init` 并提交后，推到 GitHub
+
+1. 打开 [GitHub 新建仓库](https://github.com/new)，名称可填 `feishu-news-bot`，**不要**勾选添加 README（保持空仓库）。
+2. 在项目目录执行（把 URL 换成你的仓库 HTTPS 地址）：
+
+```powershell
+cd "d:\人工智能\cloud code"
+.\push-to-github.ps1 -RemoteUrl "https://github.com/你的用户名/feishu-news-bot.git"
+```
+
+若提示登录，按 GitHub 要求用浏览器或 Personal Access Token 完成认证。推送成功后，在仓库 **Settings → Secrets → Actions** 添加 `FEISHU_WEBHOOK`。
+
 若你之前在本机建过「每天 10 点」的 Windows 计划任务，为避免 **重复推送两条**，请删除该任务：
 
 ```powershell
