@@ -1,0 +1,17 @@
+{
+  "feishu_webhook": "https://open.feishu.cn/open-apis/bot/v2/hook/replace-with-your-token",
+  "max_items_per_category": 8,
+  "summary_max_chars": 520,
+  "feishu_text_chunk_size": 3400,
+  "feeds": {
+    "tech_ai": [
+      "https://www.theverge.com/rss/index.xml",
+      "https://www.wired.com/feed/category/business/latest/rss",
+      "https://www.technologyreview.com/feed/"
+    ],
+    "finance": [
+      "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "https://www.caixin.com/rss/china.xml"
+    ]
+  }
+}

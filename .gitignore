@@ -1,0 +1,5 @@
+# Local secrets — use GitHub Actions secret FEISHU_WEBHOOK in CI
+config.json
+
+__pycache__/
+*.py[cod]
