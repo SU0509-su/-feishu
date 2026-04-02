@@ -13,6 +13,15 @@
 3. 工作流已配置为每日 **UTC 02:00**（即 **北京时间 10:00**）运行，见 `.github/workflows/feishu-daily-news.yml`。
 4. 推送代码后，可在 Actions 里手动 **Run workflow** 做一次测试。
 
+**一键完成 Secret + 试跑（本机已登录 GitHub / Git 已保存凭据时）**：
+
+```powershell
+cd "d:\人工智能\cloud code"
+.\scripts\complete_github_setup.ps1
+```
+
+（仅更新 Secret、不触发工作流：`.\scripts\complete_github_setup.ps1 -SkipWorkflow`）
+
 云端运行时 **不会读取** 仓库里的 `config.json`（已加入 `.gitignore` 防泄露），只使用 `config.example.json` 中的订阅源 + Secret 里的 Webhook。
 
 推送前请确认：仓库根目录存在 `config.example.json` 与 `news_bot.py`、`requirements.txt`、`.github/workflows/feishu-daily-news.yml`。
