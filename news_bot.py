@@ -180,33 +180,77 @@ def is_mostly_chinese(text: str, ratio: float = 0.22) -> bool:
 def needs_translation(text: str) -> bool:
     if not text or not contains_english(text):
         return False
-    if is_mostly_chinese(text):
+    # 只有中文占比足够高时才跳过翻译（避免英文里夹少量符号被误判）
+    if is_mostly_chinese(text, ratio=0.35):
         return False
     return True
+
+
+def _translate_google(text: str) -> str:
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {
+        "client": "gtx",
+        "sl": "auto",
+        "tl": "zh-CN",
+        "dt": "t",
+        "q": text,
+    }
+    resp = requests.get(url, params=params, timeout=(5, 18))
+    resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data, list) and data and isinstance(data[0], list):
+        return "".join(part[0] for part in data[0] if isinstance(part, list) and part) or text
+    return text
+
+
+def _translate_mymemory_chunk(chunk: str) -> str:
+    if not chunk.strip():
+        return chunk
+    r = requests.get(
+        "https://api.mymemory.translated.net/get",
+        params={"q": chunk, "langpair": "en|zh-CN"},
+        timeout=(5, 20),
+        headers={"User-Agent": "news-bot/1.0"},
+    )
+    r.raise_for_status()
+    data = r.json()
+    out = (data.get("responseData") or {}).get("translatedText") or chunk
+    # API 偶发返回错误提示英文
+    if "MYMEMORY WARNING" in out or "QUERY LENGTH LIMIT" in out:
+        return chunk
+    return out
+
+
+def _translate_mymemory(text: str) -> str:
+    text = text.strip()
+    if len(text) <= 480:
+        return _translate_mymemory_chunk(text)
+    parts: List[str] = []
+    for i in range(0, len(text), 450):
+        parts.append(_translate_mymemory_chunk(text[i : i + 450]))
+    return "".join(parts)
 
 
 def translate_to_zh(text: str) -> str:
     text = (text or "").strip()
     if not needs_translation(text):
         return text
+    original = text
     try:
-        url = "https://translate.googleapis.com/translate_a/single"
-        params = {
-            "client": "gtx",
-            "sl": "auto",
-            "tl": "zh-CN",
-            "dt": "t",
-            "q": text,
-        }
-        resp = requests.get(url, params=params, timeout=(4, 12))
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, list) and data and isinstance(data[0], list):
-            translated = "".join(part[0] for part in data[0] if isinstance(part, list) and part)
-            return translated or text
-        return text
+        t = _translate_google(text)
+        if t and not needs_translation(t):
+            return t
+        if t and is_mostly_chinese(t, ratio=0.12):
+            return t
     except Exception:
-        return text
+        t = original
+    try:
+        t2 = _translate_mymemory(original)
+        if t2 and t2.strip() != original.strip():
+            return t2
+    except Exception:
+        pass
+    return original
 
 
 def translate_long_to_zh(text: str, max_chunk: int = 950) -> str:
@@ -334,12 +378,15 @@ def format_item_line(index: int, item: NewsItem) -> str:
     )
 
 
-def build_message(tech_items: List[NewsItem], finance_items: List[NewsItem]) -> str:
+def build_message(
+    tech_items: List[NewsItem], finance_items: List[NewsItem], supplement: bool = False
+) -> str:
     now_text = datetime.now(SHANGHAI_TZ).strftime("%Y-%m-%d")
+    tag = "【简报·补发】" if supplement else "【简报】"
     lines: List[str] = [
-        f"【简报】每日新闻详细总结 {now_text}（北京时间）",
+        f"{tag}每日新闻详细总结 {now_text}（北京时间）",
         "",
-        "说明：以下为科技/AI 与财经领域要闻的较完整摘要（含背景要点与原文链接），专有名词酌情保留英文。",
+        "说明：标题与摘要已统一译为中文（机器翻译，Google 与备用接口）；专有名词可保留英文。",
         "",
         "────────",
         "一、科技 / AI",
@@ -429,6 +476,11 @@ def main() -> None:
         action="store_true",
         help="Print message without sending to Feishu",
     )
+    parser.add_argument(
+        "--supplement",
+        action="store_true",
+        help="Mark message as 补发 in title (e.g. make-up run for missed schedule)",
+    )
     args = parser.parse_args()
 
     config = load_config(Path(args.config))
@@ -445,7 +497,7 @@ def main() -> None:
         "finance", config["feeds"]["finance"], max_items, summary_max_chars
     )
     print(f"财经：已选 {len(finance_items)} 条", flush=True)
-    message = build_message(tech_items, finance_items)
+    message = build_message(tech_items, finance_items, supplement=args.supplement)
 
     if args.dry_run:
         print(message)

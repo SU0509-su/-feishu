@@ -75,6 +75,8 @@ schtasks /Delete /TN "FeishuDailyNews" /F
 
 环境变量 `FEISHU_WEBHOOK` 可覆盖配置文件中的 Webhook（CI 使用）。
 
+补发某天简报（本地执行，标题带「补发」）：`python news_bot.py --supplement`
+
 ## 说明
 
 - 部分境外 RSS 在国内网络可能不稳定，可在 `feeds` 中增删源。
