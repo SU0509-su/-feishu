@@ -22,6 +22,18 @@ cd "d:\人工智能\cloud code"
 
 （仅更新 Secret、不触发工作流：`.\scripts\complete_github_setup.ps1 -SkipWorkflow`）
 
+### 某天没收到？先对照 Actions
+
+在仓库 **Actions** 打开 **Feishu daily news brief**，看运行记录里的 **触发方式**：
+
+| 显示 | 含义 |
+|------|------|
+| `schedule` | 定时任务触发（每天约北京时间 10:00，GitHub 可能晚几分钟到一小时） |
+| `workflow_dispatch` | 手动点「Run workflow」或脚本触发 |
+
+- **工作流刚推到 GitHub 的当天早上**：若推送时间晚于当日 **UTC 02:00**（北京时间 10:00），**当天**不会再补跑，**次日**同一时间才会出现第一次 `schedule`。
+- 若历史里**从未出现** `schedule`、只有手动运行：请拉取本仓库最新工作流（已含 `permissions` 与 `concurrency`），并确认 **Settings → Actions → General** 中 Actions 已启用。
+
 云端运行时 **不会读取** 仓库里的 `config.json`（已加入 `.gitignore` 防泄露），只使用 `config.example.json` 中的订阅源 + Secret 里的 Webhook。
 
 推送前请确认：仓库根目录存在 `config.example.json` 与 `news_bot.py`、`requirements.txt`、`.github/workflows/feishu-daily-news.yml`。

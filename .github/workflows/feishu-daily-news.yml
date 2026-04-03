@@ -1,10 +1,18 @@
 # 每日北京时间 10:00 推送（UTC 02:00）。不依赖本机开机。
 name: Feishu daily news brief
 
+permissions:
+  contents: read
+
 on:
   schedule:
+    # UTC 每日 02:00 = 北京时间 10:00（无夏令时）
     - cron: "0 2 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: feishu-daily-news
+  cancel-in-progress: false
 
 jobs:
   send:
