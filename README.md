@@ -30,9 +30,24 @@ cd "d:\人工智能\cloud code"
 |------|------|
 | `schedule` | 定时任务触发（每天约北京时间 10:00，GitHub 可能晚几分钟到一小时） |
 | `workflow_dispatch` | 手动点「Run workflow」或脚本触发 |
+| `repository_dispatch` | 外部服务（见下）按 API 触发，可作定时兜底 |
 
 - **工作流刚推到 GitHub 的当天早上**：若推送时间晚于当日 **UTC 02:00**（北京时间 10:00），**当天**不会再补跑，**次日**同一时间才会出现第一次 `schedule`。
-- 若历史里**从未出现** `schedule`、只有手动运行：请拉取本仓库最新工作流（已含 `permissions` 与 `concurrency`），并确认 **Settings → Actions → General** 中 Actions 已启用。
+- **GitHub `schedule` 可能整段不跑**（负载高、队列问题等），若某天 Actions 里**完全没有**当日的 `schedule` 记录，属于平台侧现象；已去掉易阻塞的 `concurrency`，并支持 **`repository_dispatch`** 由外部定时调用兜底（见下）。
+- 若历史里**从未出现** `schedule`、只有手动运行：请拉取本仓库最新工作流，并确认 **Settings → Actions → General** 中 Actions 已启用。
+
+**定时兜底（推荐在「总收不到 schedule」时配置）**：在 [cron-job.org](https://cron-job.org) 等外部定时服务，每天 **北京时间 10:05** 对你的仓库发一次 `repository_dispatch`（需 Personal Access Token，权限含 `contents` 或 `workflow`）：
+
+```http
+POST https://api.github.com/repos/SU0509-su/-feishu/dispatches
+Authorization: Bearer <你的 PAT>
+Accept: application/vnd.github+json
+Content-Type: application/json
+
+{"event_type":"daily"}
+```
+
+与内置 `cron: 0 2 * * *` 并存时，可能同一天触发两次；若你希望**只**用外部定时，可把 workflow 里的 `schedule` 整段删掉（需自行改 YAML）。
 
 云端运行时 **不会读取** 仓库里的 `config.json`（已加入 `.gitignore` 防泄露），只使用 `config.example.json` 中的订阅源 + Secret 里的 Webhook。
 

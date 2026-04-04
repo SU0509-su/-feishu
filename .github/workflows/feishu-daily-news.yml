@@ -1,4 +1,5 @@
 # 每日北京时间 10:00 推送（UTC 02:00）。不依赖本机开机。
+# 说明：GitHub 对 schedule 可能晚跑、漏跑；可用 repository_dispatch 由外部定时器触发作为兜底。
 name: Feishu daily news brief
 
 permissions:
@@ -6,13 +7,10 @@ permissions:
 
 on:
   schedule:
-    # UTC 每日 02:00 = 北京时间 10:00（无夏令时）
     - cron: "0 2 * * *"
   workflow_dispatch:
-
-concurrency:
-  group: feishu-daily-news
-  cancel-in-progress: false
+  repository_dispatch:
+    types: [daily]
 
 jobs:
   send:
