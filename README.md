@@ -10,7 +10,7 @@
 2. 在仓库 **Settings → Secrets and variables → Actions** 中新建 Secret：
    - 名称：`FEISHU_WEBHOOK`
    - 值：你的飞书机器人 Webhook 地址（与本地 `config.json` 里相同）。
-3. 工作流已配置为每日 **UTC 02:00**（即 **北京时间 10:00**）运行，见 `.github/workflows/feishu-daily-news.yml`。
+3. 工作流在 **北京时间约 10:00～12:00** 之间 **多档 UTC 定时**重试（并带 **仓库内日期去重**：同一天只对飞书成功发 **一次**），减轻 GitHub 单次 `schedule` 漏跑问题，见 `.github/workflows/feishu-daily-news.yml`。标记文件：`.github/feishu-last-sent-date`（由机器人自动提交，勿手改）。
 4. 推送代码后，可在 Actions 里手动 **Run workflow** 做一次测试。
 
 **一键完成 Secret + 试跑（本机已登录 GitHub / Git 已保存凭据时）**：

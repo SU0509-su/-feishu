@@ -1,16 +1,25 @@
-# 每日北京时间 10:00 推送（UTC 02:00）。不依赖本机开机。
-# 说明：GitHub 对 schedule 可能晚跑、漏跑；可用 repository_dispatch 由外部定时器触发作为兜底。
+# 北京时间上午多时段重试 + 仓库内日期标记去重：每天只向飞书成功推送一次，降低 GitHub 单次 schedule 漏跑的影响。
 name: Feishu daily news brief
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   schedule:
     - cron: "0 2 * * *"
+    - cron: "15 2 * * *"
+    - cron: "30 2 * * *"
+    - cron: "45 2 * * *"
+    - cron: "0 3 * * *"
+    - cron: "30 3 * * *"
+    - cron: "0 4 * * *"
   workflow_dispatch:
   repository_dispatch:
     types: [daily]
+
+concurrency:
+  group: feishu-news-brief
+  cancel-in-progress: false
 
 jobs:
   send:
@@ -31,4 +40,5 @@ jobs:
       - name: Run news bot
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_CI_DEDUP: "1"
         run: python -u news_bot.py

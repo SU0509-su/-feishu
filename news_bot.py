@@ -1,13 +1,15 @@
 import argparse
+import base64
 import json
 import os
 import re
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote, urlparse
 
 import feedparser
 import requests
@@ -32,6 +34,9 @@ SOURCE_ZH_MAP = {
 DEFAULT_SUMMARY_MAX_CHARS = 520
 DEFAULT_CHUNK_SIZE = 3400
 MAX_ENTRIES_PER_FEED = 35
+# CI 去重：在仓库中记录「某日已发送」，避免多时段定时任务重复推飞书
+MARKER_PATH = ".github/feishu-last-sent-date"
+DEFAULT_BRANCH = "main"
 
 
 @dataclass
@@ -450,6 +455,93 @@ def send_to_feishu_chunked(webhook: str, message: str, chunk_size: int) -> None:
         send_to_feishu(webhook, prefix + part)
 
 
+def _today_shanghai() -> str:
+    return datetime.now(SHANGHAI_TZ).strftime("%Y-%m-%d")
+
+
+def _ci_dedup_enabled() -> bool:
+    return os.environ.get("FEISHU_CI_DEDUP", "").strip().lower() in ("1", "true", "yes")
+
+
+def _github_headers(token: str) -> Dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def github_read_marker(repo: str, token: str) -> Tuple[Optional[str], Optional[str]]:
+    enc = quote(MARKER_PATH, safe="")
+    url = f"https://api.github.com/repos/{repo}/contents/{enc}"
+    r = requests.get(
+        url,
+        headers=_github_headers(token),
+        params={"ref": DEFAULT_BRANCH},
+        timeout=25,
+    )
+    if r.status_code == 404:
+        return None, None
+    r.raise_for_status()
+    data = r.json()
+    if not isinstance(data, dict) or data.get("type") != "file":
+        return None, None
+    sha = data.get("sha")
+    b64 = data.get("content", "") or ""
+    raw = base64.b64decode(b64).decode("utf-8").strip()
+    return raw, sha
+
+
+def github_write_marker(repo: str, token: str, date_str: str, old_sha: Optional[str]) -> None:
+    content_b64 = base64.b64encode(date_str.encode("utf-8")).decode("ascii")
+    enc = quote(MARKER_PATH, safe="")
+    url = f"https://api.github.com/repos/{repo}/contents/{enc}"
+    body: Dict[str, Any] = {
+        "message": f"chore(bot): 简报已发送 {date_str}",
+        "content": content_b64,
+        "branch": DEFAULT_BRANCH,
+    }
+    if old_sha:
+        body["sha"] = old_sha
+    r = requests.put(url, headers=_github_headers(token), json=body, timeout=35)
+    r.raise_for_status()
+
+
+def ci_should_skip_duplicate_send() -> bool:
+    if not _ci_dedup_enabled():
+        return False
+    repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not repo or not token:
+        print("[WARN] FEISHU_CI_DEDUP 已开启但缺少 GITHUB_REPOSITORY/GITHUB_TOKEN，不去重。", flush=True)
+        return False
+    today = _today_shanghai()
+    try:
+        text, _ = github_read_marker(repo, token)
+    except Exception as e:
+        print(f"[WARN] 读取发送标记失败，继续发送: {e}", flush=True)
+        return False
+    return bool(text and text.strip() == today)
+
+
+def ci_record_successful_send() -> None:
+    if not _ci_dedup_enabled():
+        return
+    repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not repo or not token:
+        return
+    today = _today_shanghai()
+    try:
+        text, sha = github_read_marker(repo, token)
+        if text and text.strip() == today:
+            return
+        github_write_marker(repo, token, today, sha)
+        print(f"已写入今日发送标记: {today}", flush=True)
+    except Exception as e:
+        print(f"[WARN] 写入发送标记失败（极端情况下可能重复推送）: {e}", flush=True)
+
+
 def collect_category_items(
     category: str, feeds: List[str], max_items: int, summary_max_chars: int
 ) -> List[NewsItem]:
@@ -483,6 +575,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if _ci_dedup_enabled() and not args.supplement and ci_should_skip_duplicate_send():
+        print("【简报】今日已成功发送过（仓库内标记），本次跳过。", flush=True)
+        sys.exit(0)
+
     config = load_config(Path(args.config))
     max_items = int(config["max_items_per_category"])
     summary_max_chars = int(config.get("summary_max_chars", DEFAULT_SUMMARY_MAX_CHARS))
@@ -505,6 +601,8 @@ def main() -> None:
 
     send_to_feishu_chunked(config["feishu_webhook"], message, chunk_size)
     print("News sent to Feishu successfully.", flush=True)
+    if _ci_dedup_enabled() and not args.supplement:
+        ci_record_successful_send()
 
 
 if __name__ == "__main__":
